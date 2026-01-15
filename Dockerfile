@@ -8,16 +8,17 @@ COPY frontend ./
 RUN pnpm build
 
 # 后端构建阶段
-FROM rust:1.84-alpine AS builder
+FROM rust:alpine AS builder
 
 RUN apk add --no-cache musl-dev openssl-dev openssl-libs-static
 
 WORKDIR /app
-COPY backend/Cargo.toml backend/Cargo.lock* ./
-COPY backend/src ./src
+# 保持 backend 目录结构，确保 rust-embed 的相对路径（../frontend/dist）可用
+COPY backend/Cargo.toml backend/Cargo.lock* /app/backend/
+COPY backend/src /app/backend/src
 COPY --from=frontend-builder /app/frontend/dist /app/frontend/dist
 
-RUN cargo build --release
+RUN cargo build --release --manifest-path /app/backend/Cargo.toml
 
 # 运行阶段
 FROM alpine:3.21
@@ -25,7 +26,7 @@ FROM alpine:3.21
 RUN apk add --no-cache ca-certificates
 
 WORKDIR /app
-COPY --from=builder /app/target/release/kiro-rs /app/kiro-rs
+COPY --from=builder /app/backend/target/release/kiro-rs /app/kiro-rs
 
 VOLUME ["/app/data"]
 
