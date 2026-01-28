@@ -4,6 +4,8 @@
 //! Output: RuntimeConfig 结构体
 //! Pos: 存储从数据库读取的运行时配置
 
+use crate::model::config::TlsBackend;
+
 /// 运行时配置（从数据库 settings 表读取）
 #[derive(Debug, Clone)]
 pub struct RuntimeConfig {
@@ -14,6 +16,7 @@ pub struct RuntimeConfig {
     pub count_tokens_api_key: Option<String>,
     pub count_tokens_auth_type: String,
     pub min_usage_threshold: f64,
+    pub tls_backend: TlsBackend,
 }
 
 impl Default for RuntimeConfig {
@@ -26,6 +29,7 @@ impl Default for RuntimeConfig {
             count_tokens_api_key: None,
             count_tokens_auth_type: "x-api-key".to_string(),
             min_usage_threshold: 5.0,
+            tls_backend: TlsBackend::default(),
         }
     }
 }

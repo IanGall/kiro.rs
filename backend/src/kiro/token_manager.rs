@@ -142,9 +142,13 @@ pub(crate) async fn refresh_token(
         }
     });
 
-    match auth_method.to_lowercase().as_str() {
-        "idc" | "builder-id" => refresh_idc_token(credentials, config, proxy_url).await,
-        _ => refresh_social_token(credentials, config, proxy_url).await,
+    if auth_method.eq_ignore_ascii_case("idc")
+        || auth_method.eq_ignore_ascii_case("builder-id")
+        || auth_method.eq_ignore_ascii_case("iam")
+    {
+        refresh_idc_token(credentials, config, proxy_url).await
+    } else {
+        refresh_social_token(credentials, config, proxy_url).await
     }
 }
 
@@ -167,7 +171,7 @@ async fn refresh_social_token(
         .ok_or_else(|| anyhow::anyhow!("无法生成 machineId"))?;
     let kiro_version = &config.kiro_version;
 
-    let client = build_client(proxy_url, 60)?;
+    let client = build_client(proxy_url, 60, config.tls_backend)?;
     let body = RefreshRequest {
         refresh_token: refresh_token.to_string(),
     };
@@ -227,7 +231,7 @@ const IDC_AMZ_USER_AGENT: &str = "aws-sdk-js/3.738.0 ua/2.1 os/other lang/js md/
 /// 刷新 IdC Token (AWS SSO OIDC)
 async fn refresh_idc_token(
     credentials: &KiroCredentials,
-    _config: &RuntimeConfig,
+    config: &RuntimeConfig,
     proxy_url: Option<&str>,
 ) -> anyhow::Result<KiroCredentials> {
     tracing::info!("正在刷新 IdC Token...");
@@ -247,7 +251,7 @@ async fn refresh_idc_token(
     let region = credentials.region.as_ref().unwrap_or(&default_region);
     let refresh_url = format!("https://oidc.{}.amazonaws.com/token", region);
 
-    let client = build_client(proxy_url, 60)?;
+    let client = build_client(proxy_url, 60, config.tls_backend)?;
     let body = IdcRefreshRequest {
         client_id: client_id.to_string(),
         client_secret: client_secret.to_string(),
@@ -344,7 +348,7 @@ pub(crate) async fn get_usage_limits(
         USAGE_LIMITS_AMZ_USER_AGENT_PREFIX, kiro_version, machine_id
     );
 
-    let client = build_client(proxy_url, 60)?;
+    let client = build_client(proxy_url, 60, config.tls_backend)?;
 
     let response = client
         .get(&url)
@@ -553,6 +557,7 @@ impl MultiTokenManager {
         let entries: Vec<CredentialEntry> = credentials
             .into_iter()
             .map(|mut cred| {
+                cred.canonicalize_auth_method();
                 let id = cred.id.unwrap_or(0);
                 if cred.machine_id.is_none() {
                     if let Some(machine_id) =
@@ -605,6 +610,7 @@ impl MultiTokenManager {
             .into_iter()
             .enumerate()
             .map(|(idx, mut cred)| {
+                cred.canonicalize_auth_method();
                 let id = cred.id.unwrap_or((idx + 1) as u64);
                 cred.id = Some(id);
                 if cred.machine_id.is_none() {
@@ -1454,7 +1460,13 @@ impl MultiTokenManager {
                             DisabledReason::AccountSuspended => "suspended".to_string(),
                         }),
                         failure_count: e.failure_count,
-                        auth_method: e.credentials.auth_method.clone(),
+                        auth_method: e.credentials.auth_method.as_deref().map(|m| {
+                            if m.eq_ignore_ascii_case("builder-id") || m.eq_ignore_ascii_case("iam") {
+                                "idc".to_string()
+                            } else {
+                                m.to_string()
+                            }
+                        }),
                         region: e.credentials.region.clone(),
                         machine_id: e.credentials.machine_id.clone(),
                         has_profile_arn: e.credentials.profile_arn.is_some(),
@@ -1703,6 +1715,8 @@ impl MultiTokenManager {
     /// - `Ok(u64)` - 新凭据 ID
     /// - `Err(_)` - 验证失败或添加失败
     pub async fn add_credential(&self, new_cred: KiroCredentials) -> anyhow::Result<u64> {
+        let mut new_cred = new_cred;
+        new_cred.canonicalize_auth_method();
         // 1. 基本验证
         validate_refresh_token(&new_cred)?;
 
@@ -1721,7 +1735,7 @@ impl MultiTokenManager {
         let new_id = if let Some(db) = &self.db {
             // 设置元数据
             validated_cred.priority = new_cred.priority;
-            validated_cred.auth_method = new_cred.auth_method.clone();
+        validated_cred.auth_method = new_cred.auth_method.clone();
             validated_cred.client_id = new_cred.client_id.clone();
             validated_cred.client_secret = new_cred.client_secret.clone();
             validated_cred.region = new_cred.region.clone();
@@ -1965,7 +1979,14 @@ impl MultiTokenManager {
     /// 返回所有凭据的完整信息（包含敏感字段如 refresh_token）
     pub fn get_all_credentials_for_export(&self) -> Vec<KiroCredentials> {
         let entries = self.entries.lock();
-        entries.iter().map(|e| e.credentials.clone()).collect()
+        entries
+            .iter()
+            .map(|e| {
+                let mut cred = e.credentials.clone();
+                cred.canonicalize_auth_method();
+                cred
+            })
+            .collect()
     }
 }
 

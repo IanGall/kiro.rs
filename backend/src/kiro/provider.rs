@@ -35,8 +35,8 @@ const API_TIMEOUT_SECS: u64 = 720;
 pub struct KiroProvider {
     token_manager: Arc<MultiTokenManager>,
     /// 代理 URL -> Client 的缓存
-    /// None 键表示无代理的 Client
-    client_cache: RwLock<HashMap<Option<String>, Client>>,
+    /// None 键表示无代理的 Client，TLS 后端纳入缓存键避免串用
+    client_cache: RwLock<HashMap<(Option<String>, crate::model::config::TlsBackend), Client>>,
 }
 
 impl KiroProvider {
@@ -57,7 +57,8 @@ impl KiroProvider {
     ///
     /// 使用缓存避免重复创建 Client
     fn get_or_create_client(&self, proxy_url: Option<&str>) -> anyhow::Result<Client> {
-        let key = proxy_url.map(|s| s.to_string());
+        let tls_backend = self.token_manager.config().tls_backend;
+        let key = (proxy_url.map(|s| s.to_string()), tls_backend);
 
         // 先尝试读取缓存
         {
@@ -68,7 +69,7 @@ impl KiroProvider {
         }
 
         // 缓存未命中，创建新 Client
-        let client = build_client(proxy_url, API_TIMEOUT_SECS)?;
+        let client = build_client(proxy_url, API_TIMEOUT_SECS, tls_backend)?;
 
         // 写入缓存
         {

@@ -5,6 +5,7 @@ backend/target
 # 配置和凭证文件
 /config.json
 /credentials.json
+credentials.*
 .env
 *.db
 

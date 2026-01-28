@@ -34,8 +34,8 @@ async fn main() {
     // 初始化日志
     tracing_subscriber::fmt()
         .with_env_filter(
-            tracing_subscriber::EnvFilter::from_default_env()
-                .add_directive(tracing::Level::INFO.into()),
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
         )
         .init();
 
@@ -60,7 +60,9 @@ async fn main() {
     tracing::info!("数据库已初始化: {}", config.db_path);
 
     // 从数据库加载运行时配置
-    let runtime_config = db.get_runtime_config();
+    let mut runtime_config = db.get_runtime_config();
+    // 使用启动配置覆盖 TLS 后端
+    runtime_config.tls_backend = config.tls_backend;
     tracing::info!(
         "运行时配置: kiro_version={}, system_version={}",
         runtime_config.kiro_version,
@@ -103,6 +105,7 @@ async fn main() {
         api_key: runtime_config.count_tokens_api_key.clone(),
         auth_type: runtime_config.count_tokens_auth_type.clone(),
         proxy_url: None,
+        tls_backend: runtime_config.tls_backend,
     });
 
     // 构建 Anthropic API 路由（从第一个凭据获取 profile_arn）
@@ -175,6 +178,8 @@ async fn main() {
     tracing::info!("  GET  /v1/models");
     tracing::info!("  POST /v1/messages");
     tracing::info!("  POST /v1/messages/count_tokens");
+    tracing::info!("  POST /cc/v1/messages");
+    tracing::info!("  POST /cc/v1/messages/count_tokens");
     tracing::info!("Admin API:");
     tracing::info!("  POST /api/admin/login");
     tracing::info!("  POST /api/admin/logout");

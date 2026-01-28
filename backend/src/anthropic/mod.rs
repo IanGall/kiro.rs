@@ -6,6 +6,8 @@
 //! - `GET /v1/models` - 获取可用模型列表
 //! - `POST /v1/messages` - 创建消息（对话）
 //! - `POST /v1/messages/count_tokens` - 计算 token 数量
+//! - `POST /cc/v1/messages` - Claude Code 兼容端点（缓冲流式）
+//! - `POST /cc/v1/messages/count_tokens` - 计算 token 数量
 //!
 //! # 使用示例
 //! ```rust,ignore

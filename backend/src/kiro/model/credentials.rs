@@ -31,7 +31,7 @@ pub struct KiroCredentials {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub expires_at: Option<String>,
 
-    /// 认证方式 (social / idc / builder-id)
+    /// 认证方式 (social / idc / builder-id / iam)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub auth_method: Option<String>,
 
@@ -67,6 +67,14 @@ pub struct KiroCredentials {
 /// 判断是否为零（用于跳过序列化）
 fn is_zero(value: &u32) -> bool {
     *value == 0
+}
+
+fn canonicalize_auth_method_value(value: &str) -> &str {
+    if value.eq_ignore_ascii_case("builder-id") || value.eq_ignore_ascii_case("iam") {
+        "idc"
+    } else {
+        value
+    }
 }
 
 /// 凭据配置（支持单对象或数组格式）
@@ -111,10 +119,16 @@ impl CredentialsConfig {
     /// 转换为按优先级排序的凭据列表
     pub fn into_sorted_credentials(self) -> Vec<KiroCredentials> {
         match self {
-            CredentialsConfig::Single(cred) => vec![cred],
+            CredentialsConfig::Single(mut cred) => {
+                cred.canonicalize_auth_method();
+                vec![cred]
+            }
             CredentialsConfig::Multiple(mut creds) => {
                 // 按优先级排序（数字越小优先级越高）
                 creds.sort_by_key(|c| c.priority);
+                for cred in &mut creds {
+                    cred.canonicalize_auth_method();
+                }
                 creds
             }
         }
@@ -166,6 +180,19 @@ impl KiroCredentials {
     /// 序列化为格式化的 JSON 字符串
     pub fn to_pretty_json(&self) -> Result<String, serde_json::Error> {
         serde_json::to_string_pretty(self)
+    }
+
+    /// 统一认证方式值（builder-id/iam -> idc）
+    pub fn canonicalize_auth_method(&mut self) {
+        let auth_method = match &self.auth_method {
+            Some(m) => m,
+            None => return,
+        };
+
+        let canonical = canonicalize_auth_method_value(auth_method);
+        if canonical != auth_method {
+            self.auth_method = Some(canonical.to_string());
+        }
     }
 }
 
@@ -233,6 +260,22 @@ mod tests {
             KiroCredentials::default_credentials_path(),
             "credentials.json"
         );
+    }
+
+    #[test]
+    fn test_canonicalize_auth_method() {
+        let mut creds = KiroCredentials::default();
+        creds.auth_method = Some("builder-id".to_string());
+        creds.canonicalize_auth_method();
+        assert_eq!(creds.auth_method, Some("idc".to_string()));
+
+        creds.auth_method = Some("iam".to_string());
+        creds.canonicalize_auth_method();
+        assert_eq!(creds.auth_method, Some("idc".to_string()));
+
+        creds.auth_method = Some("social".to_string());
+        creds.canonicalize_auth_method();
+        assert_eq!(creds.auth_method, Some("social".to_string()));
     }
 
     #[test]

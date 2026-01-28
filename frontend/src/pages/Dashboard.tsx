@@ -659,7 +659,7 @@ export default function DashboardPage() {
                   onChange={(e) => setAddForm({ ...addForm, authMethod: e.target.value })}
                 >
                   <option value="social">Social</option>
-                  <option value="idc">IdC</option>
+                  <option value="idc">IdC/Builder-ID/IAM</option>
                 </select>
               </div>
               {addForm.authMethod === 'idc' && (
@@ -733,7 +733,7 @@ export default function DashboardPage() {
 
 说明：
 - refreshToken: 必填
-- clientId + clientSecret: 都有值则为 IdC 模式，否则为 Social 模式
+- clientId + clientSecret: 都有值则为 IdC/Builder-ID/IAM 模式，否则为 Social 模式
 - region: 可选，默认 us-east-1
 - proxyUrl: 可选，默认为空`}
                   value={importJson}

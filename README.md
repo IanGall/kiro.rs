@@ -9,7 +9,7 @@
 
 ## 注意
 
-因 TLS 库从 native-tls 切换至 rustls，你可能需要专门安装证书后才能配置 HTTP PROXY。
+默认使用 **rustls** 作为 TLS 后端，如遇到代理证书问题可通过 `TLS_BACKEND=native-tls` 切换为系统 TLS。
 
 ## 功能特性
 
@@ -27,12 +27,26 @@
 
 ## 支持的 API 端点
 
+### 标准端点 (/v1)
+
 | 端点 | 方法 | 描述 |
 |------|------|------|
 | `/v1/models` | GET | 获取可用模型列表 |
 | `/v1/messages` | POST | 创建消息（对话） |
 | `/v1/messages/count_tokens` | POST | 估算 Token 数量 |
 | `/admin` | GET | Admin 管理后台 UI |
+
+### Claude Code 兼容端点 (/cc/v1)
+
+| 端点 | 方法 | 描述 |
+|------|------|------|
+| `/cc/v1/messages` | POST | 创建消息（流式响应会等待上游完成后再返回，确保 `input_tokens` 准确） |
+| `/cc/v1/messages/count_tokens` | POST | 估算 Token 数量（与 `/v1` 相同） |
+
+> **`/cc/v1/messages` 与 `/v1/messages` 的区别**：
+> - `/v1/messages`：实时流式返回，`message_start` 中的 `input_tokens` 是估算值  
+> - `/cc/v1/messages`：缓冲模式，等待上游流完成后，用 `contextUsageEvent` 计算的准确 `input_tokens` 更正 `message_start`，然后一次性返回所有事件  
+> - 等待期间会每 25 秒发送 `ping` 事件保活
 
 ## 快速开始
 
@@ -99,6 +113,10 @@ DB_PATH=data.db
 # JWT 配置（可选，不配置则自动生成）
 JWT_SECRET=your-jwt-secret-key-at-least-32-characters
 JWT_EXPIRY_HOURS=24
+
+# TLS 后端（可选，默认 rustls）
+TLS_BACKEND=rustls
+# 可选值：rustls / native-tls
 ```
 
 **注意：** 以下配置项存储在数据库中，通过 Admin 管理后台的「设置」页面进行管理：
@@ -128,7 +146,7 @@ JWT_EXPIRY_HOURS=24
 | 认证方式 | 必填字段 | 说明 |
 |----------|----------|------|
 | `social` | `refreshToken`, `expiresAt` | Social 登录方式 |
-| `idc` | `refreshToken`, `expiresAt`, `clientId`, `clientSecret` | IdC 登录方式 |
+| `idc` | `refreshToken`, `expiresAt`, `clientId`, `clientSecret` | IdC / Builder-ID / IAM（等价） |
 
 ### 启动服务
 

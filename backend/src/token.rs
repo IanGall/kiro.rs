@@ -8,6 +8,7 @@ use crate::anthropic::types::{
     CountTokensRequest, CountTokensResponse, Message, SystemMessage, Tool,
 };
 use crate::http_client::build_client;
+use crate::model::config::TlsBackend;
 use std::sync::OnceLock;
 
 /// Count Tokens API 配置
@@ -21,6 +22,8 @@ pub struct CountTokensConfig {
     pub auth_type: String,
     /// 代理 URL
     pub proxy_url: Option<String>,
+    /// TLS 后端
+    pub tls_backend: TlsBackend,
 }
 
 /// 全局配置存储
@@ -140,7 +143,7 @@ async fn call_remote_count_tokens(
     messages: &Vec<Message>,
     tools: &Option<Vec<Tool>>,
 ) -> Result<u64, Box<dyn std::error::Error + Send + Sync>> {
-    let client = build_client(config.proxy_url.as_deref(), 300)?;
+    let client = build_client(config.proxy_url.as_deref(), 300, config.tls_backend)?;
 
     // 构建请求体
     let request = CountTokensRequest {

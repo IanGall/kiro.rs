@@ -594,6 +594,8 @@ impl Database {
                 .flatten()
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(5.0),
+            // 启动配置中的 TLS 后端会在 main 中覆盖
+            tls_backend: crate::model::config::TlsBackend::default(),
         }
     }
 }

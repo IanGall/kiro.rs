@@ -7,6 +7,19 @@
 use std::env;
 use std::path::Path;
 
+/// TLS 后端类型
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum TlsBackend {
+    Rustls,
+    NativeTls,
+}
+
+impl Default for TlsBackend {
+    fn default() -> Self {
+        Self::Rustls
+    }
+}
+
 /// 应用启动配置（运行时配置存储在数据库 settings 表）
 #[derive(Debug, Clone)]
 pub struct Config {
@@ -23,6 +36,8 @@ pub struct Config {
     pub admin_username: String,
     /// 默认管理员密码（仅首次初始化时使用，默认 admin123）
     pub admin_password: String,
+    /// TLS 后端类型（默认 rustls）
+    pub tls_backend: TlsBackend,
 }
 
 fn default_host() -> String {
@@ -49,6 +64,23 @@ fn default_admin_password() -> String {
     "admin123".to_string()
 }
 
+fn default_tls_backend() -> TlsBackend {
+    TlsBackend::Rustls
+}
+
+fn parse_tls_backend(value: Option<String>) -> TlsBackend {
+    match value.as_deref() {
+        Some(v)
+            if v.eq_ignore_ascii_case("native-tls")
+                || v.eq_ignore_ascii_case("native_tls")
+                || v.eq_ignore_ascii_case("native") =>
+        {
+            TlsBackend::NativeTls
+        }
+        _ => TlsBackend::Rustls,
+    }
+}
+
 impl Default for Config {
     fn default() -> Self {
         Self {
@@ -60,6 +92,7 @@ impl Default for Config {
             jwt_expiry_hours: default_jwt_expiry_hours(),
             admin_username: default_admin_username(),
             admin_password: default_admin_password(),
+            tls_backend: default_tls_backend(),
         }
     }
 }
@@ -98,6 +131,7 @@ impl Config {
                 .unwrap_or_else(default_jwt_expiry_hours),
             admin_username: env::var("ADMIN_USERNAME").unwrap_or_else(|_| default_admin_username()),
             admin_password: env::var("ADMIN_PASSWORD").unwrap_or_else(|_| default_admin_password()),
+            tls_backend: parse_tls_backend(env::var("TLS_BACKEND").ok()),
         })
     }
 
@@ -111,5 +145,31 @@ impl Config {
             hasher.update(&random_bytes);
             hex::encode(hasher.finalize())
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_tls_backend() {
+        assert_eq!(
+            parse_tls_backend(Some("native-tls".to_string())),
+            TlsBackend::NativeTls
+        );
+        assert_eq!(
+            parse_tls_backend(Some("native_tls".to_string())),
+            TlsBackend::NativeTls
+        );
+        assert_eq!(
+            parse_tls_backend(Some("native".to_string())),
+            TlsBackend::NativeTls
+        );
+        assert_eq!(
+            parse_tls_backend(Some("rustls".to_string())),
+            TlsBackend::Rustls
+        );
+        assert_eq!(parse_tls_backend(None), TlsBackend::Rustls);
     }
 }

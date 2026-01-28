@@ -383,7 +383,6 @@ fn convert_tools(tools: &Option<Vec<super::types::Tool>>) -> Vec<Tool> {
 
     tools
         .iter()
-        .filter(|t| !is_unsupported_tool(&t.name))
         .map(|t| {
             let description = t.description.clone();
             // 限制描述长度为 10000 字符（安全截断 UTF-8，单次遍历）
@@ -401,12 +400,6 @@ fn convert_tools(tools: &Option<Vec<super::types::Tool>>) -> Vec<Tool> {
             }
         })
         .collect()
-}
-
-/// 检查是否为不支持的工具
-fn is_unsupported_tool(name: &str) -> bool {
-    // matches!(name.to_lowercase().as_str(), "web_search" | "websearch")
-    false
 }
 
 /// 生成thinking标签前缀
@@ -586,13 +579,6 @@ fn convert_assistant_message(
                             }
                         }
                         "tool_use" => {
-                            // 过滤不支持的工具
-                            if let Some(ref name) = block.name {
-                                if is_unsupported_tool(name) {
-                                    continue;
-                                }
-                            }
-
                             if let (Some(id), Some(name)) = (block.id, block.name) {
                                 let input = block.input.unwrap_or(serde_json::json!({}));
                                 tool_uses.push(ToolUseEntry::new(id, name).with_input(input));
@@ -620,7 +606,7 @@ fn convert_assistant_message(
     } else if text_content.is_empty() && !tool_uses.is_empty() {
         // 如果只有 tool_use 没有文本内容，添加占位符
         // Kiro API 要求 assistant 消息必须有文本内容
-        "I'll help you with that.".to_string()
+        " ".to_string()
     } else {
         text_content
     };
@@ -694,15 +680,6 @@ mod tests {
     }
 
     #[test]
-    fn test_is_unsupported_tool() {
-        // 当前实现不过滤任何工具（web_search 等已支持）
-        assert!(!is_unsupported_tool("web_search"));
-        assert!(!is_unsupported_tool("websearch"));
-        assert!(!is_unsupported_tool("WebSearch"));
-        assert!(!is_unsupported_tool("read_file"));
-    }
-
-    #[test]
     fn test_collect_history_tool_names() {
         use crate::kiro::model::requests::tool::ToolUseEntry;
 
@@ -729,6 +706,27 @@ mod tests {
         assert_eq!(tool_names.len(), 2);
         assert!(tool_names.contains(&"read".to_string()));
         assert!(tool_names.contains(&"write".to_string()));
+    }
+
+    #[test]
+    fn test_tool_use_only_placeholder_is_space() {
+        use super::super::types::Message as AnthropicMessage;
+
+        let msg = AnthropicMessage {
+            role: "assistant".to_string(),
+            content: serde_json::json!([
+                {"type": "tool_use", "id": "tool-1", "name": "read", "input": {"path": "/test.txt"}}
+            ]),
+        };
+
+        let result = convert_assistant_message(&msg).unwrap();
+        assert_eq!(result.assistant_response_message.content, " ");
+        assert!(result
+            .assistant_response_message
+            .tool_uses
+            .as_ref()
+            .map(|v| !v.is_empty())
+            .unwrap_or(false));
     }
 
     #[test]
