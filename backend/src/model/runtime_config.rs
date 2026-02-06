@@ -22,7 +22,7 @@ pub struct RuntimeConfig {
 impl Default for RuntimeConfig {
     fn default() -> Self {
         Self {
-            kiro_version: "0.8.0".to_string(),
+            kiro_version: "0.9.2".to_string(),
             system_version: "darwin#24.6.0".to_string(),
             node_version: "v22.12.0".to_string(),
             count_tokens_api_url: None,

@@ -121,7 +121,7 @@ TLS_BACKEND=rustls
 
 **注意：** 以下配置项存储在数据库中，通过 Admin 管理后台的「设置」页面进行管理：
 
-- `kiro_version` - Kiro 版本号（默认 0.8.0）
+- `kiro_version` - Kiro 版本号（默认 0.9.2）
 - `system_version` - 系统版本（默认 darwin#24.6.0）
 - `node_version` - Node.js 版本（默认 v22.12.0）
 - `proxy_url` - HTTP 代理地址
@@ -241,7 +241,8 @@ kiro-rs/
 | Anthropic 模型 | Kiro 模型 |
 |----------------|-----------|
 | `*sonnet*` | `claude-sonnet-4.5` |
-| `*opus*` | `claude-opus-4.5` |
+| `*opus*`（包含 `4.5`） | `claude-opus-4.5` |
+| 其他 `*opus*` | `claude-opus-4.6` |
 | `*haiku*` | `claude-haiku-4.5` |
 
 ## 高级功能

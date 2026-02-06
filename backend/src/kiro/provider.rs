@@ -690,7 +690,7 @@ mod tests {
     #[test]
     fn test_build_headers() {
         let mut config = RuntimeConfig::default();
-        config.kiro_version = "0.8.0".to_string();
+        config.kiro_version = "0.9.2".to_string();
 
         let mut credentials = KiroCredentials::default();
         credentials.profile_arn = Some("arn:aws:sso::123456789:profile/test".to_string());

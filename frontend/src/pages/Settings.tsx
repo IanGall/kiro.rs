@@ -188,7 +188,7 @@ export default function SettingsPage() {
             <div className="space-y-2">
               <Label>Kiro Version</Label>
               <Input
-                placeholder="0.8.0"
+                placeholder="0.9.2"
                 value={form.kiroVersion}
                 onChange={(e) => setForm({ ...form, kiroVersion: e.target.value })}
               />

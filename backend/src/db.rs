@@ -139,7 +139,7 @@ impl Database {
 
         // 初始化默认系统设置（使用 INSERT OR IGNORE 避免覆盖已有设置）
         let defaults = [
-            ("kiro_version", "0.8.0"),
+            ("kiro_version", "0.9.2"),
             ("system_version", "darwin#24.6.0"),
             ("node_version", "v22.12.0"),
             ("min_usage_threshold", "5"),
@@ -568,7 +568,7 @@ impl Database {
             kiro_version: self.get_setting("kiro_version")
                 .ok()
                 .flatten()
-                .unwrap_or_else(|| "0.8.0".to_string()),
+                .unwrap_or_else(|| "0.9.2".to_string()),
             system_version: self.get_setting("system_version")
                 .ok()
                 .flatten()

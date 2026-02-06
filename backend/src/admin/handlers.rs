@@ -273,7 +273,7 @@ pub async fn get_settings(State(state): State<AdminState>) -> impl IntoResponse 
     let kiro_version = state.db.get_setting("kiro_version")
         .ok()
         .flatten()
-        .unwrap_or_else(|| "0.8.0".to_string());
+        .unwrap_or_else(|| "0.9.2".to_string());
     let system_version = state.db.get_setting("system_version")
         .ok()
         .flatten()

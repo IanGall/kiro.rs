@@ -85,7 +85,7 @@ cargo build --release
 
 | 键 | 默认值 | 说明 |
 |----|--------|------|
-| `kiro_version` | `0.8.0` | Kiro 版本号 |
+| `kiro_version` | `0.9.2` | Kiro 版本号 |
 | `system_version` | `darwin#24.6.0` | 系统版本 |
 | `node_version` | `v22.12.0` | Node.js 版本 |
 | `proxy_url` | - | HTTP 代理地址 |
