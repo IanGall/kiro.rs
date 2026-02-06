@@ -543,6 +543,7 @@ mod tests {
             }]),
             tool_choice: None,
             thinking: None,
+            output_config: None,
             metadata: None,
         };
 
@@ -580,6 +581,7 @@ mod tests {
             ]),
             tool_choice: None,
             thinking: None,
+            output_config: None,
             metadata: None,
         };
 
@@ -606,6 +608,7 @@ mod tests {
             tools: None,
             tool_choice: None,
             thinking: None,
+            output_config: None,
             metadata: None,
         };
 
@@ -630,6 +633,7 @@ mod tests {
             tools: None,
             tool_choice: None,
             thinking: None,
+            output_config: None,
             metadata: None,
         };
 
