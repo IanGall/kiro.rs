@@ -18,7 +18,7 @@
 docker buildx build \
   --platform linux/amd64 \
   -t ianqian1111/kiro-rs:latest \
-  -t ianqian1111/kiro-rs:1.7 \
+  -t ianqian1111/kiro-rs:2.2 \
   --push \
   -f Dockerfile .
 ```
