@@ -18,7 +18,8 @@ use super::types::{ContentBlock, MessagesRequest, Thinking};
 ///
 /// 按照用户要求：
 /// - 所有 sonnet → claude-sonnet-4.5
-/// - 所有 opus → claude-opus-4.5
+/// - opus 4.5 → claude-opus-4.5
+/// - 其他 opus → claude-opus-4.6
 /// - 所有 haiku → claude-haiku-4.5
 pub fn map_model(model: &str) -> Option<String> {
     let model_lower = model.to_lowercase();
@@ -26,7 +27,11 @@ pub fn map_model(model: &str) -> Option<String> {
     if model_lower.contains("sonnet") {
         Some("claude-sonnet-4.5".to_string())
     } else if model_lower.contains("opus") {
-        Some("claude-opus-4.5".to_string())
+        if model_lower.contains("4-5") || model_lower.contains("4.5") {
+            Some("claude-opus-4.5".to_string())
+        } else {
+            Some("claude-opus-4.6".to_string())
+        }
     } else if model_lower.contains("haiku") {
         Some("claude-haiku-4.5".to_string())
     } else {
@@ -641,10 +646,17 @@ mod tests {
 
     #[test]
     fn test_map_model_opus() {
-        assert!(
-            map_model("claude-opus-4-20250514")
-                .unwrap()
-                .contains("opus")
+        assert_eq!(
+            map_model("claude-opus-4-5-20251101").unwrap(),
+            "claude-opus-4.5"
+        );
+        assert_eq!(
+            map_model("claude-opus-4-6-20260206").unwrap(),
+            "claude-opus-4.6"
+        );
+        assert_eq!(
+            map_model("claude-opus-4-20250514").unwrap(),
+            "claude-opus-4.6"
         );
     }
 
