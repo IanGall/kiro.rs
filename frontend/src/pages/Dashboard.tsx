@@ -38,6 +38,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { authApi, credentialsApi, importExportApi, type CredentialItem, type UserInfo, type ImportCredentialItem } from '@/api';
 import { User, Plus, DotsThreeVertical, Gear, SignOut, Envelope, ArrowsClockwise, ArrowsCounterClockwise, Sun, Moon, Export, UploadSimple, Play, Trash } from '@phosphor-icons/react';
 import { useTheme } from '@/hooks/useTheme';
+import { useImportVerify } from '@/hooks/useImportVerify';
 
 export default function DashboardPage() {
   const navigate = useNavigate();
@@ -75,6 +76,16 @@ export default function DashboardPage() {
     newPassword: '',
     confirmPassword: '',
   });
+  const {
+    importing,
+    importProgress,
+    currentProcessing,
+    importResults,
+    resetImportState,
+    getImportStatusText,
+    validateImportList,
+    runImportVerify,
+  } = useImportVerify({ credentials });
 
   // 加载用户信息和凭据
   useEffect(() => {
@@ -407,6 +418,8 @@ export default function DashboardPage() {
 
   // 导入凭据
   const handleImport = async () => {
+    if (importing) return;
+
     if (!importJson.trim()) {
       toast.error('请输入 JSON 数据');
       return;
@@ -416,29 +429,27 @@ export default function DashboardPage() {
       const parsed = JSON.parse(importJson) as ImportCredentialItem | ImportCredentialItem[];
       const list = Array.isArray(parsed) ? parsed : [parsed];
 
-      for (let index = 0; index < list.length; index++) {
-        const credential = list[index];
-        const clientId = credential.clientId?.trim();
-        const clientSecret = credential.clientSecret?.trim();
+      const validation = validateImportList(list);
+      if (!validation.ok) {
+        toast.error(validation.message);
+        return;
+      }
 
-        if ((clientId && !clientSecret) || (!clientId && clientSecret)) {
-          toast.error(`第 ${index + 1} 条凭据校验失败：idc 模式需要同时提供 clientId 和 clientSecret`);
-          return;
+      const summary = await runImportVerify(list);
+
+      if (summary.failCount === 0 && summary.duplicateCount === 0) {
+        toast.success(`成功导入并验活 ${summary.successCount} 个凭据`);
+      } else {
+        const failureSummary = summary.failCount > 0
+          ? `，失败 ${summary.failCount} 个（已排除 ${summary.rollbackSuccessCount}，未排除 ${summary.rollbackFailedCount}，无需排除 ${summary.rollbackSkippedCount}）`
+          : '';
+        toast.info(`验活完成：成功 ${summary.successCount} 个，重复 ${summary.duplicateCount} 个${failureSummary}`);
+
+        if (summary.rollbackFailedCount > 0) {
+          toast.warning(`有 ${summary.rollbackFailedCount} 个失败凭据回滚未完成，请手动禁用并删除`);
         }
       }
 
-      const data = Array.isArray(parsed) ? list : list[0];
-      const res = await importExportApi.import(data);
-
-      if (res.failures.length > 0) {
-        toast.warning(`导入完成: ${res.successCount} 成功, ${res.failures.length} 失败`);
-      } else {
-        toast.success(`成功导入 ${res.successCount} 个凭据`);
-      }
-
-      setShowAddDialog(false);
-      setImportJson('');
-      setAddTab('single');
       refreshCredentials();
     } catch (err) {
       if (err instanceof SyntaxError) {
@@ -659,6 +670,7 @@ export default function DashboardPage() {
         if (!open) {
           setAddTab('single');
           setImportJson('');
+          resetImportState();
         }
       }}>
         <DialogContent className="max-w-2xl">
@@ -755,8 +767,8 @@ export default function DashboardPage() {
               <div className="space-y-2">
                 <Label>JSON 数据</Label>
                 <textarea
-                  className="w-full h-64 px-3 py-2 rounded-md border bg-background font-mono text-sm resize-none"
-                  placeholder={`支持以下格式：
+                className="w-full h-64 px-3 py-2 rounded-md border bg-background font-mono text-sm resize-none"
+                placeholder={`支持以下格式：
 
 单个凭据：
 {
@@ -775,18 +787,54 @@ export default function DashboardPage() {
 - refreshToken: 必填
 - clientId + clientSecret: 都有值则为 IdC/Builder-ID/IAM 模式，否则为 Social 模式
 - region: 可选，默认 us-east-1
+- machineId: 可选
 - proxyUrl: 可选，默认为空`}
                   value={importJson}
                   onChange={(e) => setImportJson(e.target.value)}
                 />
               </div>
+              {(importing || importResults.length > 0) && (
+                <div className="space-y-3 rounded-md border p-3">
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span>{importing ? '验活进度' : '验活完成'}</span>
+                      <span>{importProgress.current} / {importProgress.total}</span>
+                    </div>
+                    <div className="w-full bg-secondary rounded-full h-2 overflow-hidden">
+                      <div
+                        className="h-full bg-primary rounded-full transition-all duration-300"
+                        style={{ width: `${importProgress.total > 0 ? (importProgress.current / importProgress.total) * 100 : 0}%` }}
+                      />
+                    </div>
+                    {importing && currentProcessing && (
+                      <div className="text-xs text-muted-foreground">{currentProcessing}</div>
+                    )}
+                  </div>
+
+                  <div className="max-h-40 overflow-y-auto space-y-2">
+                    {importResults.map((result) => (
+                      <div key={result.index} className="text-xs rounded border px-2 py-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <span>凭据 #{result.index + 1}</span>
+                          <span className="text-muted-foreground">{getImportStatusText(result)}</span>
+                        </div>
+                        {result.usage && <div className="text-muted-foreground mt-1">使用量：{result.usage}</div>}
+                        {result.error && <div className="text-red-600 dark:text-red-400 mt-1">{result.error}</div>}
+                        {result.rollbackError && (
+                          <div className="text-red-600 dark:text-red-400 mt-1">回滚失败: {result.rollbackError}</div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               <DialogFooter>
                 <Button variant="outline" onClick={() => setShowAddDialog(false)}>
                   取消
                 </Button>
-                <Button onClick={handleImport}>
+                <Button onClick={handleImport} disabled={importing}>
                   <UploadSimple size={16} className="mr-1" />
-                  导入
+                  {importing ? '导入中...' : '导入'}
                 </Button>
               </DialogFooter>
             </TabsContent>
