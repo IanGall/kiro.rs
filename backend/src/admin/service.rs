@@ -235,6 +235,8 @@ impl AdminService {
         let is_invalid_credential = msg.contains("缺少 refreshToken")
             || msg.contains("refreshToken 为空")
             || msg.contains("refreshToken 已被截断")
+            || msg.contains("凭据已存在")
+            || msg.contains("refreshToken 重复")
             || msg.contains("凭证已过期或无效")
             || msg.contains("权限不足")
             || msg.contains("已被限流");
@@ -336,28 +338,40 @@ impl AdminService {
         let mut failures = Vec::new();
 
         for (index, item) in items.into_iter().enumerate() {
+            let client_id = item.client_id.map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
+            let client_secret = item.client_secret.map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
+            let machine_id = item.machine_id.map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
+            let proxy_url = item.proxy_url.map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
+
             // 根据 client_id 和 client_secret 判断认证方式
-            let auth_method = if item.client_id.as_ref().map_or(false, |s| !s.is_empty())
-                && item.client_secret.as_ref().map_or(false, |s| !s.is_empty())
-            {
+            let auth_method = if client_id.is_some() && client_secret.is_some() {
                 "idc".to_string()
             } else {
                 "social".to_string()
             };
 
+            // idc 模式字段必须成对出现
+            if client_id.is_some() ^ client_secret.is_some() {
+                failures.push(ImportFailure {
+                    index,
+                    error: "idc 模式需要同时提供 clientId 和 clientSecret".to_string(),
+                });
+                continue;
+            }
+
             let new_cred = KiroCredentials {
                 id: None,
                 access_token: None,
-                refresh_token: Some(item.refresh_token),
+                refresh_token: Some(item.refresh_token.trim().to_string()),
                 profile_arn: None,
                 expires_at: None,
                 auth_method: Some(auth_method),
-                client_id: item.client_id.filter(|s| !s.is_empty()),
-                client_secret: item.client_secret.filter(|s| !s.is_empty()),
+                client_id,
+                client_secret,
                 priority: 0,
                 region: Some(item.region.unwrap_or_else(|| "us-east-1".to_string())),
-                machine_id: None,
-                proxy_url: item.proxy_url.filter(|s| !s.is_empty()),
+                machine_id,
+                proxy_url,
             };
 
             match self.token_manager.add_credential(new_cred).await {

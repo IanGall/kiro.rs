@@ -235,6 +235,7 @@ export interface ImportCredentialItem {
   clientId?: string;
   clientSecret?: string;
   region?: string;
+  machineId?: string;
   proxyUrl?: string;
 }
 

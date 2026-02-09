@@ -8,6 +8,7 @@ use anyhow::bail;
 use chrono::{DateTime, Duration, Utc};
 use parking_lot::Mutex;
 use serde::Serialize;
+use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use tokio::sync::Mutex as TokioMutex;
 
@@ -120,6 +121,12 @@ pub(crate) fn validate_refresh_token(credentials: &KiroCredentials) -> anyhow::R
     }
 
     Ok(())
+}
+
+fn sha256_hex(value: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(value.as_bytes());
+    hex::encode(hasher.finalize())
 }
 
 /// 刷新 Token
@@ -1720,22 +1727,44 @@ impl MultiTokenManager {
         // 1. 基本验证
         validate_refresh_token(&new_cred)?;
 
-        // 2. 尝试刷新 Token 验证凭据有效性
+        // 2. 基于 refreshToken 的 SHA-256 哈希检测重复
+        let new_refresh_token = new_cred
+            .refresh_token
+            .as_deref()
+            .ok_or_else(|| anyhow::anyhow!("缺少 refreshToken"))?;
+        let new_refresh_token_hash = sha256_hex(new_refresh_token);
+        let duplicate_exists = {
+            let entries = self.entries.lock();
+            entries.iter().any(|entry| {
+                entry
+                    .credentials
+                    .refresh_token
+                    .as_deref()
+                    .map(sha256_hex)
+                    .as_deref()
+                    == Some(new_refresh_token_hash.as_str())
+            })
+        };
+        if duplicate_exists {
+            anyhow::bail!("凭据已存在（refreshToken 重复）");
+        }
+
+        // 3. 尝试刷新 Token 验证凭据有效性
         let mut validated_cred =
             refresh_token(&new_cred, &self.config).await?;
 
-        // 3. 自动生成 machineId（如果未提供）
+        // 4. 自动生成 machineId（如果未提供）
         let machine_id = if new_cred.machine_id.is_some() {
             new_cred.machine_id.clone()
         } else {
             machine_id::generate_from_credentials(&new_cred, &self.config)
         };
 
-        // 4. 先持久化到数据库获取 ID
+        // 5. 先持久化到数据库获取 ID
         let new_id = if let Some(db) = &self.db {
             // 设置元数据
             validated_cred.priority = new_cred.priority;
-        validated_cred.auth_method = new_cred.auth_method.clone();
+            validated_cred.auth_method = new_cred.auth_method.clone();
             validated_cred.client_id = new_cred.client_id.clone();
             validated_cred.client_secret = new_cred.client_secret.clone();
             validated_cred.region = new_cred.region.clone();
@@ -1750,7 +1779,7 @@ impl MultiTokenManager {
             entries.iter().map(|e| e.id).max().unwrap_or(0) + 1
         };
 
-        // 5. 设置 ID 并保留用户输入的元数据
+        // 6. 设置 ID 并保留用户输入的元数据
         validated_cred.id = Some(new_id);
         validated_cred.priority = new_cred.priority;
         validated_cred.auth_method = new_cred.auth_method;

@@ -59,6 +59,7 @@ export default function DashboardPage() {
     clientId: '',
     clientSecret: '',
     region: 'us-east-1',
+    machineId: '',
     proxyUrl: '',
   });
   const [editForm, setEditForm] = useState({
@@ -189,11 +190,12 @@ export default function DashboardPage() {
         clientId: addForm.clientId || undefined,
         clientSecret: addForm.clientSecret || undefined,
         region: addForm.region,
+        machineId: addForm.machineId || undefined,
         proxyUrl: addForm.proxyUrl || undefined,
       });
       toast.success('添加成功');
       setShowAddDialog(false);
-      setAddForm({ refreshToken: '', authMethod: 'social', clientId: '', clientSecret: '', region: 'us-east-1', proxyUrl: '' });
+      setAddForm({ refreshToken: '', authMethod: 'social', clientId: '', clientSecret: '', region: 'us-east-1', machineId: '', proxyUrl: '' });
       refreshCredentials();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : '添加失败');
@@ -358,16 +360,28 @@ export default function DashboardPage() {
       return;
     }
 
-    if (!confirm(`确定要删除选中的 ${selectedIds.size} 个凭据吗？此操作不可恢复。`)) {
+    const disabledIds = Array.from(selectedIds).filter((id) => {
+      const credential = credentials.find((c) => c.id === id);
+      return Boolean(credential?.disabled);
+    });
+
+    if (disabledIds.length === 0) {
+      toast.error('选中的凭据中没有已禁用项');
+      return;
+    }
+
+    const skippedCount = selectedIds.size - disabledIds.length;
+    const skippedText = skippedCount > 0 ? `（将跳过 ${skippedCount} 个未禁用凭据）` : '';
+
+    if (!confirm(`确定要删除选中的 ${disabledIds.length} 个已禁用凭据吗？此操作不可恢复。${skippedText}`)) {
       return;
     }
 
     try {
-      const ids = Array.from(selectedIds);
       let successCount = 0;
       let failCount = 0;
 
-      for (const id of ids) {
+      for (const id of disabledIds) {
         try {
           await credentialsApi.delete(id);
           successCount++;
@@ -376,10 +390,12 @@ export default function DashboardPage() {
         }
       }
 
+      const skippedResultText = skippedCount > 0 ? `，已跳过 ${skippedCount} 个未禁用凭据` : '';
+
       if (failCount > 0) {
-        toast.warning(`删除完成: ${successCount} 成功, ${failCount} 失败`);
+        toast.warning(`删除已禁用凭据：成功 ${successCount} 个，失败 ${failCount} 个${skippedResultText}`);
       } else {
-        toast.success(`成功删除 ${successCount} 个凭据`);
+        toast.success(`成功删除 ${successCount} 个已禁用凭据${skippedResultText}`);
       }
 
       setSelectedIds(new Set());
@@ -397,7 +413,21 @@ export default function DashboardPage() {
     }
 
     try {
-      const data = JSON.parse(importJson) as ImportCredentialItem | ImportCredentialItem[];
+      const parsed = JSON.parse(importJson) as ImportCredentialItem | ImportCredentialItem[];
+      const list = Array.isArray(parsed) ? parsed : [parsed];
+
+      for (let index = 0; index < list.length; index++) {
+        const credential = list[index];
+        const clientId = credential.clientId?.trim();
+        const clientSecret = credential.clientSecret?.trim();
+
+        if ((clientId && !clientSecret) || (!clientId && clientSecret)) {
+          toast.error(`第 ${index + 1} 条凭据校验失败：idc 模式需要同时提供 clientId 和 clientSecret`);
+          return;
+        }
+      }
+
+      const data = Array.isArray(parsed) ? list : list[0];
       const res = await importExportApi.import(data);
 
       if (res.failures.length > 0) {
@@ -487,14 +517,15 @@ export default function DashboardPage() {
                 <Export size={16} className="mr-1" />
                 导出 Token {selectedIds.size > 0 && `(${selectedIds.size})`}
               </Button>
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={handleBatchDelete}
-                disabled={selectedIds.size === 0}
-              >
-                <Trash size={16} className="mr-1" />
-                批量删除 {selectedIds.size > 0 && `(${selectedIds.size})`}
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={handleBatchDelete}
+                  disabled={Array.from(selectedIds).filter((id) => credentials.find((c) => c.id === id)?.disabled).length === 0}
+                  title={Array.from(selectedIds).filter((id) => credentials.find((c) => c.id === id)?.disabled).length === 0 ? '只能删除已禁用凭据' : undefined}
+                >
+                  <Trash size={16} className="mr-1" />
+                  批量删除 {selectedIds.size > 0 && `(${selectedIds.size})`}
               </Button>
               <Button size="sm" onClick={() => setShowAddDialog(true)}>
                 <Plus size={16} className="mr-1" />
@@ -694,6 +725,15 @@ export default function DashboardPage() {
                   <option value="us-west-2">us-west-2 (Oregon)</option>
                   <option value="eu-west-1">eu-west-1 (Ireland)</option>
                 </select>
+              </div>
+              <div className="space-y-2">
+                <Label>Machine ID</Label>
+                <Input
+                  placeholder="可选，64 位十六进制字符串"
+                  value={addForm.machineId}
+                  onChange={(e) => setAddForm({ ...addForm, machineId: e.target.value })}
+                />
+                <p className="text-xs text-muted-foreground">留空则按后端规则自动生成</p>
               </div>
               <div className="space-y-2">
                 <Label>代理 URL</Label>

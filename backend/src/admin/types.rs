@@ -384,6 +384,9 @@ pub struct ImportCredentialItem {
     /// AWS Region（可选，默认 us-east-1）
     #[serde(default)]
     pub region: Option<String>,
+    /// 凭据级 Machine ID（可选）
+    #[serde(default)]
+    pub machine_id: Option<String>,
     /// 代理 URL（可选，默认为空）
     #[serde(default)]
     pub proxy_url: Option<String>,
